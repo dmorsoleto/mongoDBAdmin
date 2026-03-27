@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── Dark theme (default) ──────────────────────────────────────────────────── */
+
+html.dark, html.dark body, html.dark #root {
+  background-color: #111827;
+  color: #f3f4f6;
+}
+
+html.dark {
+  --color-gray-50:  #f9fafb;
+  --color-gray-100: #f3f4f6;
+  --color-gray-200: #e5e7eb;
+  --color-gray-300: #d1d5db;
+  --color-gray-400: #9ca3af;
+  --color-gray-500: #6b7280;
+  --color-gray-600: #4b5563;
+  --color-gray-700: #374151;
+  --color-gray-800: #1f2937;
+  --color-gray-900: #111827;
+  --color-white:    #ffffff;
+}
+
+html.dark ::-webkit-scrollbar-track  { background: #1f2937; }
+html.dark ::-webkit-scrollbar-thumb  { background: #374151; border-radius: 3px; }
+html.dark ::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+
+/* ── Light theme ───────────────────────────────────────────────────────────── */
+
+html:not(.dark), html:not(.dark) body, html:not(.dark) #root {
+  background-color: #f3f4f6;
+  color: #111827;
+}
+
+html:not(.dark) {
+  /* Remap the gray scale so dark-mode classes become light */
+  --color-gray-900: #f3f4f6;  /* main bg → near-white */
+  --color-gray-800: #ffffff;  /* card bg → white */
+  --color-gray-700: #e5e7eb;  /* subtle borders/hover */
+  --color-gray-600: #d1d5db;  /* borders */
+  --color-gray-500: #9ca3af;  /* muted icons */
+  --color-gray-400: #374151;  /* muted text → readable dark */
+  --color-gray-300: #1f2937;  /* text */
+  --color-gray-200: #111827;  /* primary text → near black */
+  --color-gray-100: #111827;
+  --color-gray-50:  #111827;
+  /* Make text-white readable on light backgrounds */
+  --color-white:    #111827;
+}
+
+/* Accent overrides for light mode — keep green vivid */
+html:not(.dark) {
+  --color-green-400: #16a34a;
+  --color-green-500: #15803d;
+  --color-green-600: #166534;
+  --color-green-700: #14532d;
+}
+
+/* text-white → near black in light mode */
+html:not(.dark) .text-white {
+  color: #111827 !important;
+}
+
+/* Ensure inputs/selects look right in light mode */
+html:not(.dark) input:-webkit-autofill,
+html:not(.dark) input:-webkit-autofill:hover,
+html:not(.dark) input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #111827;
+  box-shadow: 0 0 0 1000px #ffffff inset;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+html:not(.dark) ::-webkit-scrollbar-track  { background: #e5e7eb; }
+html:not(.dark) ::-webkit-scrollbar-thumb  { background: #9ca3af; border-radius: 3px; }
+html:not(.dark) ::-webkit-scrollbar-thumb:hover { background: #6b7280; }

@@ -89,24 +89,47 @@ npm install
 npm run tauri dev
 ```
 
-### Build de produção
+### Build de produção (macOS local)
 
 Use o script auxiliar que atualiza a versão automaticamente nos 3 arquivos de configuração e compila:
 
 ```bash
+# Build apenas para a arquitetura atual
 npm run tauri:build
-# ou diretamente:
-bash scripts/build.sh
+
+# Build para todos os targets macOS (aarch64 + x86_64 + universal)
+npm run tauri:build:all
 ```
 
 Os binários gerados ficam em:
 
 ```
-src-tauri/target/release/bundle/
-├── macos/          → MongoDB Admin.app  +  .dmg
-├── windows/        → .msi  /  nsis/*.exe
-└── linux/          → .AppImage  /  deb/*.deb
+dist-release/{version}/
+├── mongodb-admin_{version}_macos_aarch64.dmg
+├── mongodb-admin_{version}_macos_x86_64.dmg
+└── mongodb-admin_{version}_macos_universal.dmg
 ```
+
+### Publicar uma Release (todas as plataformas)
+
+O GitHub Actions compila automaticamente para **macOS, Windows e Linux** ao criar uma tag:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+O CI irá:
+1. Compilar em paralelo nas 3 plataformas
+2. Renomear os binários com a convenção `mongodb-admin_{version}_{os}_{arch}`
+3. Publicar a Release no GitHub com todos os arquivos anexados
+
+| Plataforma | Arquivo gerado |
+|---|---|
+| macOS Apple Silicon | `mongodb-admin_{version}_macos_aarch64.dmg` |
+| macOS Intel | `mongodb-admin_{version}_macos_x86_64.dmg` |
+| Windows | `mongodb-admin_{version}_windows_x86_64.msi` |
+| Linux | `mongodb-admin_{version}_linux_x86_64.AppImage` |
 
 ### Executar os testes
 

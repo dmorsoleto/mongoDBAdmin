@@ -16,6 +16,9 @@ dist-ssr
 coverage/
 src-tauri/coverage/
 
+# Release binaries
+dist-release/
+
 # Rust build output
 src-tauri/target/
 

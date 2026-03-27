@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:build": "bash scripts/build.sh",
+    "tauri:build:all": "bash scripts/build-all.sh",
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage"

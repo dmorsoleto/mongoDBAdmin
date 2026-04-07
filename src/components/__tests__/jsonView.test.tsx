@@ -168,7 +168,6 @@ describe("JsonView – array pagination (Load More)", () => {
     expect(screen.getByText("99")).toBeInTheDocument();
     // Item at index 100 (value 100) should NOT be visible before clicking Load More
     // (100 appears as a number in the array — the text "100" should not be rendered yet)
-    const allText = document.body.textContent ?? "";
     // We check the Load More button exists (proves truncation is active)
     expect(screen.getByText(/Load more/i)).toBeInTheDocument();
   });

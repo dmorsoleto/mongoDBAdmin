@@ -12,22 +12,22 @@ import { invoke } from "@tauri-apps/api/core";
 const mockInvoke = vi.mocked(invoke);
 
 const STORE_DEFAULTS = {
-  connections: [],
-  activeConnId: "conn-1",
-  selectedDb: "testdb",
-  selectedCollection: "users",
-  documents: [],
+  connections: [] as any[],
+  activeConnId: "conn-1" as string | null,
+  selectedDb: "testdb" as string | null,
+  selectedCollection: "users" as string | null,
+  documents: [] as any[],
   totalDocs: 0,
   page: 0,
   pageSize: 20,
   loading: false,
-  error: null,
+  error: null as string | null,
   readOnlyMode: false,
   protectConnectionStringSecrets: false,
-  defaultSort: "default",
-  maxTimeMsLimit: null,
-  theme: "dark",
-} as const;
+  defaultSort: "default" as const,
+  maxTimeMsLimit: null as number | null,
+  theme: "dark" as const,
+};
 
 beforeEach(() => {
   localStorage.clear();
@@ -96,7 +96,7 @@ describe("QueryEditorModal – close behaviour", () => {
 
   it("calls onClose when backdrop is clicked", () => {
     const onClose = vi.fn();
-    const { container } = render(<QueryEditorModal onClose={onClose} />);
+    render(<QueryEditorModal onClose={onClose} />);
     const backdrop = document.querySelector(".fixed.inset-0.z-50") as HTMLElement;
     if (backdrop) {
       // Simulate clicking the backdrop itself (not a child)

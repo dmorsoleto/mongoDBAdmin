@@ -95,9 +95,11 @@ interface JsonValueProps {
 }
 
 const INDENT_PX = 16
+const ARRAY_PAGE_SIZE = 100
 
 function JsonValue({ value, indent, onFilterByKey, popup, setPopup }: JsonValueProps) {
   const [collapsed, setCollapsed] = useState(false)
+  const [visibleCount, setVisibleCount] = useState(ARRAY_PAGE_SIZE)
   const pl = indent * INDENT_PX
 
   if (value === null) return <span className="text-gray-500 italic">null</span>
@@ -131,12 +133,22 @@ function JsonValue({ value, indent, onFilterByKey, popup, setPopup }: JsonValueP
           <span>
             <span className="text-gray-500">[</span>
             <div style={{ paddingLeft: INDENT_PX }}>
-              {value.map((item, i) => (
+              {value.slice(0, visibleCount).map((item, i) => (
                 <div key={i}>
                   <JsonValue value={item} indent={indent + 1} onFilterByKey={onFilterByKey} popup={popup} setPopup={setPopup} />
                   {i < value.length - 1 && <span className="text-gray-600">,</span>}
                 </div>
               ))}
+              {visibleCount < value.length && (
+                <div className="mt-1">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setVisibleCount(c => c + ARRAY_PAGE_SIZE) }}
+                    className="text-xs text-blue-400 hover:text-blue-300 transition-colors italic"
+                  >
+                    Load more ({value.length - visibleCount} remaining)…
+                  </button>
+                </div>
+              )}
             </div>
             <div style={{ paddingLeft: pl }}><span className="text-gray-500">]</span></div>
           </span>

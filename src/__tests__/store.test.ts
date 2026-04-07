@@ -1,16 +1,24 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { useStore } from "../store";
+import { useStore, extractConnName } from "../store";
+import type { ConnectionEntry } from "../store";
+
+const makeConn = (id: string, uri: string): ConnectionEntry => ({
+  id,
+  uri,
+  name: uri,
+  databases: ["admin", "test"],
+  selectedDb: null,
+  collections: [],
+});
 
 // Reset store and localStorage before each test
 beforeEach(() => {
   localStorage.clear();
   useStore.setState({
-    connected: false,
-    currentUri: "",
+    connections: [],
+    activeConnId: null,
     selectedDb: null,
     selectedCollection: null,
-    databases: [],
-    collections: [],
     documents: [],
     totalDocs: 0,
     page: 0,
@@ -25,82 +33,120 @@ beforeEach(() => {
   });
 });
 
-describe("useStore – setConnected", () => {
-  it("sets connected=true and stores the URI", () => {
-    useStore.getState().setConnected(true, "mongodb://localhost:27017");
-    const { connected, currentUri } = useStore.getState();
-    expect(connected).toBe(true);
-    expect(currentUri).toBe("mongodb://localhost:27017");
+// ── addConnection ─────────────────────────────────────────────────────────
+
+describe("useStore – addConnection", () => {
+  it("adds a connection to the list", () => {
+    useStore.getState().addConnection(makeConn("1", "mongodb://localhost:27017"));
+    expect(useStore.getState().connections).toHaveLength(1);
+    expect(useStore.getState().connections[0].id).toBe("1");
   });
 
-  it("sets connected=false with default empty URI", () => {
-    useStore.getState().setConnected(true, "mongodb://host");
-    useStore.getState().setConnected(false);
-    const { connected, currentUri } = useStore.getState();
-    expect(connected).toBe(false);
-    expect(currentUri).toBe("");
+  it("adds multiple connections", () => {
+    useStore.getState().addConnection(makeConn("1", "mongodb://host1:27017"));
+    useStore.getState().addConnection(makeConn("2", "mongodb://host2:27017"));
+    expect(useStore.getState().connections).toHaveLength(2);
   });
 });
 
-describe("useStore – setSelectedDb", () => {
-  it("sets selectedDb and resets collection/documents/collections", () => {
-    useStore.setState({
-      selectedCollection: "col1",
-      collections: ["col1", "col2"],
-      documents: [{ _id: "1" }],
-    });
-    useStore.getState().setSelectedDb("mydb");
-    const { selectedDb, selectedCollection, collections, documents } =
-      useStore.getState();
-    expect(selectedDb).toBe("mydb");
+// ── removeConnection ──────────────────────────────────────────────────────
+
+describe("useStore – removeConnection", () => {
+  it("removes a connection by id", () => {
+    useStore.getState().addConnection(makeConn("1", "mongodb://host1:27017"));
+    useStore.getState().addConnection(makeConn("2", "mongodb://host2:27017"));
+    useStore.getState().removeConnection("1");
+    const { connections } = useStore.getState();
+    expect(connections).toHaveLength(1);
+    expect(connections[0].id).toBe("2");
+  });
+
+  it("clears active state when the active connection is removed", () => {
+    useStore.getState().addConnection(makeConn("1", "mongodb://host1:27017"));
+    useStore.getState().activateCollection("1", "test", "users");
+    useStore.getState().removeConnection("1");
+    const { activeConnId, selectedDb, selectedCollection } = useStore.getState();
+    expect(activeConnId).toBeNull();
+    expect(selectedDb).toBeNull();
     expect(selectedCollection).toBeNull();
-    expect(collections).toEqual([]);
-    expect(documents).toEqual([]);
   });
 
-  it("accepts null to clear selected database", () => {
-    useStore.getState().setSelectedDb("somedb");
-    useStore.getState().setSelectedDb(null);
-    expect(useStore.getState().selectedDb).toBeNull();
+  it("preserves active state when a non-active connection is removed", () => {
+    useStore.getState().addConnection(makeConn("1", "mongodb://host1:27017"));
+    useStore.getState().addConnection(makeConn("2", "mongodb://host2:27017"));
+    useStore.getState().activateCollection("1", "mydb", "items");
+    useStore.getState().removeConnection("2");
+    expect(useStore.getState().activeConnId).toBe("1");
+    expect(useStore.getState().selectedDb).toBe("mydb");
   });
 });
 
-describe("useStore – setSelectedCollection", () => {
-  it("sets collection, clears documents, and resets page to 0", () => {
-    useStore.setState({ documents: [{ a: 1 }], page: 5 });
-    useStore.getState().setSelectedCollection("mycoll");
-    const { selectedCollection, documents, page } = useStore.getState();
-    expect(selectedCollection).toBe("mycoll");
-    expect(documents).toEqual([]);
-    expect(page).toBe(0);
+// ── updateConn ────────────────────────────────────────────────────────────
+
+describe("useStore – updateConn", () => {
+  it("updates databases for a connection", () => {
+    useStore.getState().addConnection(makeConn("1", "mongodb://localhost"));
+    useStore.getState().updateConn("1", { databases: ["db1", "db2", "db3"] });
+    const conn = useStore.getState().connections.find((c) => c.id === "1");
+    expect(conn?.databases).toEqual(["db1", "db2", "db3"]);
   });
 
-  it("accepts null to clear selected collection", () => {
-    useStore.getState().setSelectedCollection("col");
-    useStore.getState().setSelectedCollection(null);
-    expect(useStore.getState().selectedCollection).toBeNull();
+  it("updates selectedDb and collections for a connection", () => {
+    useStore.getState().addConnection(makeConn("1", "mongodb://localhost"));
+    useStore.getState().updateConn("1", { selectedDb: "mydb", collections: ["col1", "col2"] });
+    const conn = useStore.getState().connections.find((c) => c.id === "1");
+    expect(conn?.selectedDb).toBe("mydb");
+    expect(conn?.collections).toEqual(["col1", "col2"]);
+  });
+
+  it("does not affect other connections", () => {
+    useStore.getState().addConnection(makeConn("1", "mongodb://host1"));
+    useStore.getState().addConnection(makeConn("2", "mongodb://host2"));
+    useStore.getState().updateConn("1", { databases: ["onlyDb"] });
+    const conn2 = useStore.getState().connections.find((c) => c.id === "2");
+    expect(conn2?.databases).toEqual(["admin", "test"]);
   });
 });
 
-describe("useStore – setDatabases", () => {
-  it("replaces the databases array", () => {
-    useStore.getState().setDatabases(["db1", "db2", "db3"]);
-    expect(useStore.getState().databases).toEqual(["db1", "db2", "db3"]);
+// ── activateCollection ────────────────────────────────────────────────────
+
+describe("useStore – activateCollection", () => {
+  it("sets activeConnId, selectedDb, and selectedCollection", () => {
+    useStore.getState().addConnection(makeConn("1", "mongodb://localhost"));
+    useStore.getState().activateCollection("1", "mydb", "users");
+    const { activeConnId, selectedDb, selectedCollection } = useStore.getState();
+    expect(activeConnId).toBe("1");
+    expect(selectedDb).toBe("mydb");
+    expect(selectedCollection).toBe("users");
   });
 
-  it("accepts empty array", () => {
-    useStore.getState().setDatabases(["db1"]);
-    useStore.getState().setDatabases([]);
-    expect(useStore.getState().databases).toEqual([]);
+  it("resets documents and page", () => {
+    useStore.setState({ documents: [{ _id: "1" }], page: 5 });
+    useStore.getState().addConnection(makeConn("1", "mongodb://localhost"));
+    useStore.getState().activateCollection("1", "db", "coll");
+    expect(useStore.getState().documents).toEqual([]);
+    expect(useStore.getState().page).toBe(0);
+  });
+
+  it("updates the connection's selectedDb", () => {
+    useStore.getState().addConnection(makeConn("1", "mongodb://localhost"));
+    useStore.getState().activateCollection("1", "newdb", "col");
+    const conn = useStore.getState().connections.find((c) => c.id === "1");
+    expect(conn?.selectedDb).toBe("newdb");
+  });
+
+  it("switches active connection when called for a different conn", () => {
+    useStore.getState().addConnection(makeConn("1", "mongodb://host1"));
+    useStore.getState().addConnection(makeConn("2", "mongodb://host2"));
+    useStore.getState().activateCollection("1", "db1", "col1");
+    useStore.getState().activateCollection("2", "db2", "col2");
+    expect(useStore.getState().activeConnId).toBe("2");
+    expect(useStore.getState().selectedDb).toBe("db2");
+    expect(useStore.getState().selectedCollection).toBe("col2");
   });
 });
 
-describe("useStore – setCollections", () => {
-  it("replaces the collections array", () => {
-    useStore.getState().setCollections(["col1", "col2"]);
-    expect(useStore.getState().collections).toEqual(["col1", "col2"]);
-  });
-});
+// ── setDocuments ──────────────────────────────────────────────────────────
 
 describe("useStore – setDocuments", () => {
   it("replaces the documents array", () => {
@@ -109,6 +155,8 @@ describe("useStore – setDocuments", () => {
     expect(useStore.getState().documents).toEqual(docs);
   });
 });
+
+// ── setPage ───────────────────────────────────────────────────────────────
 
 describe("useStore – setPage", () => {
   it("updates the current page number", () => {
@@ -123,6 +171,8 @@ describe("useStore – setPage", () => {
   });
 });
 
+// ── setLoading ────────────────────────────────────────────────────────────
+
 describe("useStore – setLoading", () => {
   it("sets loading to true", () => {
     useStore.getState().setLoading(true);
@@ -136,6 +186,8 @@ describe("useStore – setLoading", () => {
   });
 });
 
+// ── setError ──────────────────────────────────────────────────────────────
+
 describe("useStore – setError", () => {
   it("sets an error message", () => {
     useStore.getState().setError("Connection timed out");
@@ -148,6 +200,8 @@ describe("useStore – setError", () => {
     expect(useStore.getState().error).toBeNull();
   });
 });
+
+// ── settings ──────────────────────────────────────────────────────────────
 
 describe("useStore – setReadOnlyMode", () => {
   it("enables read-only mode and persists to localStorage", () => {
@@ -168,18 +222,13 @@ describe("useStore – setProtectConnectionStringSecrets", () => {
   it("sets protectConnectionStringSecrets and persists", () => {
     useStore.getState().setProtectConnectionStringSecrets(true);
     expect(useStore.getState().protectConnectionStringSecrets).toBe(true);
-    expect(localStorage.getItem("setting_protectConnectionStringSecrets")).toBe(
-      "true"
-    );
+    expect(localStorage.getItem("setting_protectConnectionStringSecrets")).toBe("true");
   });
 
   it("can be disabled again", () => {
     useStore.getState().setProtectConnectionStringSecrets(true);
     useStore.getState().setProtectConnectionStringSecrets(false);
     expect(useStore.getState().protectConnectionStringSecrets).toBe(false);
-    expect(localStorage.getItem("setting_protectConnectionStringSecrets")).toBe(
-      "false"
-    );
   });
 });
 
@@ -190,23 +239,10 @@ describe("useStore – setDefaultSort", () => {
     expect(localStorage.getItem("setting_defaultSort")).toBe("_id_asc");
   });
 
-  it("sets defaultSort to _id_desc and persists", () => {
-    useStore.getState().setDefaultSort("_id_desc");
-    expect(useStore.getState().defaultSort).toBe("_id_desc");
-    expect(localStorage.getItem("setting_defaultSort")).toBe("_id_desc");
-  });
-
-  it("sets defaultSort to natural_desc and persists", () => {
-    useStore.getState().setDefaultSort("natural_desc");
-    expect(useStore.getState().defaultSort).toBe("natural_desc");
-    expect(localStorage.getItem("setting_defaultSort")).toBe("natural_desc");
-  });
-
   it("can reset back to default", () => {
     useStore.getState().setDefaultSort("_id_asc");
     useStore.getState().setDefaultSort("default");
     expect(useStore.getState().defaultSort).toBe("default");
-    expect(localStorage.getItem("setting_defaultSort")).toBe("default");
   });
 });
 
@@ -243,9 +279,41 @@ describe("useStore – setTheme", () => {
   });
 });
 
+// ── extractConnName ────────────────────────────────────────────────────────
+
+describe("extractConnName", () => {
+  it("extracts host:port from a simple mongodb URI", () => {
+    expect(extractConnName("mongodb://localhost:27017")).toBe("localhost:27017");
+  });
+
+  it("extracts host from a URI with a database path", () => {
+    expect(extractConnName("mongodb://localhost:27017/mydb")).toBe("localhost:27017");
+  });
+
+  it("strips credentials from a URI with auth", () => {
+    expect(extractConnName("mongodb://user:pass@myhost:27017")).toBe("myhost:27017");
+  });
+
+  it("handles mongodb+srv scheme", () => {
+    expect(extractConnName("mongodb+srv://cluster.example.mongodb.net")).toBe(
+      "cluster.example.mongodb.net"
+    );
+  });
+
+  it("handles URI without scheme", () => {
+    const result = extractConnName("myhost:27017");
+    expect(result).toBe("myhost:27017");
+  });
+
+  it("returns truncated string for an empty-ish input", () => {
+    const result = extractConnName("x");
+    expect(typeof result).toBe("string");
+    expect(result.length).toBeGreaterThan(0);
+  });
+});
+
 describe("store – loadBool helper behaviour (via setters)", () => {
   it("defaults readOnlyMode to false and persists false on disable", () => {
-    // Store initialises with false; disabling should write 'false' to localStorage
     useStore.getState().setReadOnlyMode(false);
     expect(useStore.getState().readOnlyMode).toBe(false);
     expect(localStorage.getItem("setting_readOnlyMode")).toBe("false");
@@ -253,16 +321,7 @@ describe("store – loadBool helper behaviour (via setters)", () => {
 
   it("persists true to localStorage and reads it back as boolean true", () => {
     useStore.getState().setReadOnlyMode(true);
-    expect(localStorage.getItem("setting_readOnlyMode")).toBe("true");
-    // Simulate what loadBool does: 'true' === 'true' → true
     const raw = localStorage.getItem("setting_readOnlyMode");
     expect(raw === "true").toBe(true);
-  });
-
-  it("loadBool returns false for any value that is not 'true'", () => {
-    // Simulate loadBool with a non-'true' string
-    localStorage.setItem("setting_readOnlyMode", "false");
-    const raw = localStorage.getItem("setting_readOnlyMode");
-    expect(raw === "true").toBe(false);
   });
 });

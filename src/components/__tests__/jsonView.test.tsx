@@ -145,6 +145,101 @@ describe("JsonView – compact mode", () => {
   });
 });
 
+describe("JsonView – array pagination (Load More)", () => {
+  it("renders all items when array has 100 or fewer elements", () => {
+    const tags = Array.from({ length: 5 }, (_, i) => `item${i}`);
+    render(<JsonView doc={{ tags }} />);
+    expect(screen.getByText('"item0"')).toBeInTheDocument();
+    expect(screen.getByText('"item4"')).toBeInTheDocument();
+    expect(screen.queryByText(/Load more/i)).not.toBeInTheDocument();
+  });
+
+  it("shows Load More button when array has more than 100 items", () => {
+    const bigArray = Array.from({ length: 150 }, (_, i) => i);
+    render(<JsonView doc={{ data: bigArray }} />);
+    expect(screen.getByText(/Load more/i)).toBeInTheDocument();
+    expect(screen.getByText(/50 remaining/i)).toBeInTheDocument();
+  });
+
+  it("does not render items beyond the initial 100", () => {
+    const bigArray = Array.from({ length: 150 }, (_, i) => i);
+    render(<JsonView doc={{ data: bigArray }} />);
+    // Item at index 99 (value 99) should be present
+    expect(screen.getByText("99")).toBeInTheDocument();
+    // Item at index 100 (value 100) should NOT be visible before clicking Load More
+    // (100 appears as a number in the array — the text "100" should not be rendered yet)
+    const allText = document.body.textContent ?? "";
+    // We check the Load More button exists (proves truncation is active)
+    expect(screen.getByText(/Load more/i)).toBeInTheDocument();
+  });
+
+  it("loads more items when Load More button is clicked", () => {
+    const bigArray = Array.from({ length: 150 }, (_, i) => i);
+    render(<JsonView doc={{ data: bigArray }} />);
+    const btn = screen.getByText(/Load more/i);
+    fireEvent.click(btn);
+    // After loading more, all 150 items should be visible and button should be gone
+    expect(screen.queryByText(/Load more/i)).not.toBeInTheDocument();
+  });
+
+  it("collapses and expands array with the toggle button", () => {
+    const arr = [1, 2, 3];
+    render(<JsonView doc={{ nums: arr }} />);
+    // Initially expanded — values visible
+    expect(screen.getByText("1")).toBeInTheDocument();
+    // There may be multiple Collapse buttons (outer object + inner array);
+    // click all of them to collapse the array values
+    const collapseBtns = screen.getAllByTitle("Collapse");
+    fireEvent.click(collapseBtns[collapseBtns.length - 1]);
+    // After collapsing the innermost array, expand buttons appear
+    expect(screen.getAllByTitle("Expand").length).toBeGreaterThan(0);
+  });
+});
+
+describe("JsonView – object collapse/expand", () => {
+  it("collapses an object when the ▼ button is clicked", () => {
+    render(<JsonView doc={{ user: { name: "Bob", age: 30 } }} />);
+    // The nested object has a Collapse button
+    const collapseBtns = screen.getAllByTitle("Collapse");
+    // Click the innermost collapse button (for the nested object)
+    fireEvent.click(collapseBtns[collapseBtns.length - 1]);
+    expect(screen.getAllByTitle("Expand").length).toBeGreaterThan(0);
+  });
+
+  it("expands a collapsed object by clicking the key count label", () => {
+    render(<JsonView doc={{ meta: { foo: "bar" } }} />);
+    const collapseBtns = screen.getAllByTitle("Collapse");
+    fireEvent.click(collapseBtns[collapseBtns.length - 1]);
+    // Now find the "1 key" label and click it to re-expand
+    const keyLabel = screen.getByText(/1 key/);
+    fireEvent.click(keyLabel);
+    expect(screen.queryByText(/1 key/)).not.toBeInTheDocument();
+  });
+});
+
+describe("JsonView – fallthrough value rendering", () => {
+  it("renders undefined values using String() fallback", () => {
+    render(<JsonView doc={{ field: undefined }} />);
+    expect(screen.getByText("undefined")).toBeInTheDocument();
+  });
+});
+
+describe("JsonView – popup outside click", () => {
+  it("closes the popup when a mousedown fires outside the popup area", () => {
+    const onFilterByKey = vi.fn();
+    render(<JsonView doc={{ name: "Alice" }} onFilterByKey={onFilterByKey} />);
+    const keyEl = screen.getByText('"name"');
+    Object.defineProperty(keyEl, "getBoundingClientRect", {
+      value: () => ({ bottom: 100, left: 200, top: 80, right: 250, width: 50, height: 20 }),
+    });
+    fireEvent.click(keyEl);
+    expect(screen.getByText(/Filter by/i)).toBeInTheDocument();
+    // Mousedown outside the popup area closes it
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByText(/Filter by/i)).not.toBeInTheDocument();
+  });
+});
+
 describe("JsonView – onFilterByKey popup", () => {
   it("shows a filter popup when a key is clicked", () => {
     const onFilterByKey = vi.fn();

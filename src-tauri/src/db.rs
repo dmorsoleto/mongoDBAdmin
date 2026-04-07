@@ -1,8 +1,9 @@
 use mongodb::{Client, options::ClientOptions};
+use std::collections::HashMap;
 use std::sync::Mutex;
 use tauri::State;
 
-pub struct DbState(pub Mutex<Option<Client>>);
+pub struct DbState(pub Mutex<HashMap<String, Client>>);
 
 pub(crate) fn format_error_message(raw: &str) -> String {
     if raw.contains("SCRAM") || raw.contains("Authentication failed") || raw.contains("auth") {
@@ -34,6 +35,42 @@ pub(crate) fn format_error_message(raw: &str) -> String {
 
 fn friendly_error(e: mongodb::error::Error) -> String {
     format_error_message(&e.to_string())
+}
+
+#[tauri::command]
+pub async fn connect_named(conn_id: String, uri: String, state: State<'_, DbState>) -> Result<String, String> {
+    let options = ClientOptions::parse(&uri).await.map_err(|e| e.to_string())?;
+    let client = Client::with_options(options).map_err(|e| e.to_string())?;
+    client.list_database_names(None, None).await.map_err(friendly_error)?;
+    state.0.lock().unwrap().insert(conn_id, client);
+    Ok("Connected".to_string())
+}
+
+#[tauri::command]
+pub async fn disconnect_named(conn_id: String, state: State<'_, DbState>) -> Result<(), String> {
+    state.0.lock().unwrap().remove(&conn_id);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn list_databases_for(conn_id: String, state: State<'_, DbState>) -> Result<Vec<String>, String> {
+    let client = {
+        let guard = state.0.lock().unwrap();
+        guard.get(&conn_id).ok_or_else(|| "Not connected".to_string())?.clone()
+    };
+    let names = client.list_database_names(None, None).await.map_err(|e| e.to_string())?;
+    Ok(names)
+}
+
+#[tauri::command]
+pub async fn list_collections_for(conn_id: String, db_name: String, state: State<'_, DbState>) -> Result<Vec<String>, String> {
+    let client = {
+        let guard = state.0.lock().unwrap();
+        guard.get(&conn_id).ok_or_else(|| "Not connected".to_string())?.clone()
+    };
+    let db = client.database(&db_name);
+    let names = db.list_collection_names(None).await.map_err(|e| e.to_string())?;
+    Ok(names)
 }
 
 #[cfg(test)]
@@ -117,40 +154,4 @@ mod tests {
         let msg = format_error_message("");
         assert_eq!(msg, "");
     }
-}
-
-#[tauri::command]
-pub async fn connect(uri: String, state: State<'_, DbState>) -> Result<String, String> {
-    let options = ClientOptions::parse(&uri).await.map_err(|e| e.to_string())?;
-    let client = Client::with_options(options).map_err(|e| e.to_string())?;
-    client.list_database_names(None, None).await.map_err(friendly_error)?;
-    *state.0.lock().unwrap() = Some(client);
-    Ok("Connected".to_string())
-}
-
-#[tauri::command]
-pub async fn disconnect(state: State<'_, DbState>) -> Result<(), String> {
-    *state.0.lock().unwrap() = None;
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn list_databases(state: State<'_, DbState>) -> Result<Vec<String>, String> {
-    let client = {
-        let guard = state.0.lock().unwrap();
-        guard.as_ref().ok_or("Not connected")?.clone()
-    };
-    let names = client.list_database_names(None, None).await.map_err(|e| e.to_string())?;
-    Ok(names)
-}
-
-#[tauri::command]
-pub async fn list_collections(db_name: String, state: State<'_, DbState>) -> Result<Vec<String>, String> {
-    let client = {
-        let guard = state.0.lock().unwrap();
-        guard.as_ref().ok_or("Not connected")?.clone()
-    };
-    let db = client.database(&db_name);
-    let names = db.list_collection_names(None).await.map_err(|e| e.to_string())?;
-    Ok(names)
 }

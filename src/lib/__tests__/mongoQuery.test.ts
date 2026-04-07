@@ -220,3 +220,67 @@ describe("parseQueryField", () => {
     expect(parsed.count.$gt).toBe(10);
   });
 });
+
+import { parsePipeline } from "../mongoQuery";
+
+describe("parsePipeline", () => {
+  it("throws for empty string", () => {
+    expect(() => parsePipeline("")).toThrow("Pipeline is empty");
+  });
+
+  it("throws for whitespace-only string", () => {
+    expect(() => parsePipeline("   ")).toThrow("Pipeline is empty");
+  });
+
+  it("throws when value is not an array", () => {
+    expect(() => parsePipeline("{}")).toThrow("Pipeline must be an array");
+  });
+
+  it("throws when value is a bare string", () => {
+    expect(() => parsePipeline('"hello"')).toThrow("Pipeline must be an array");
+  });
+
+  it("throws for invalid JSON that cannot be fixed", () => {
+    expect(() => parsePipeline("[ { $match: { bad syntax }")).toThrow(
+      "Invalid pipeline syntax"
+    );
+  });
+
+  it("returns JSON string for a valid simple pipeline", () => {
+    const result = parsePipeline('[{ "$match": {} }]');
+    expect(result).not.toBeNull();
+    const parsed = JSON.parse(result);
+    expect(Array.isArray(parsed)).toBe(true);
+    expect(parsed[0].$match).toEqual({});
+  });
+
+  it("converts unquoted keys in pipeline stages", () => {
+    const result = parsePipeline("[{ $match: { age: { $gt: 18 } } }]");
+    const parsed = JSON.parse(result);
+    expect(parsed[0].$match.age.$gt).toBe(18);
+  });
+
+  it("converts multi-stage pipeline", () => {
+    const result = parsePipeline(
+      "[{ $match: { active: true } }, { $sort: { _id: -1 } }, { $limit: 10 }]"
+    );
+    const parsed = JSON.parse(result);
+    expect(parsed).toHaveLength(3);
+    expect(parsed[2].$limit).toBe(10);
+  });
+
+  it("converts pipeline with ObjectId", () => {
+    const result = parsePipeline(
+      "[{ $match: { _id: ObjectId('507f1f77bcf86cd799439011') } }]"
+    );
+    const parsed = JSON.parse(result);
+    expect(parsed[0].$match._id.$oid).toBe("507f1f77bcf86cd799439011");
+  });
+
+  it("returns an empty pipeline array without throwing", () => {
+    const result = parsePipeline("[]");
+    const parsed = JSON.parse(result);
+    expect(Array.isArray(parsed)).toBe(true);
+    expect(parsed).toHaveLength(0);
+  });
+});

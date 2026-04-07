@@ -1,30 +1,23 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useStore } from './store'
 import { Connections } from './components/Connections'
 import { Sidebar } from './components/Sidebar'
 import { DocumentViewer } from './components/DocumentViewer'
 import { SettingsModal } from './components/SettingsModal'
 import { db as dbApi } from './lib/tauri'
-import { Database, LogOut, Circle, Settings } from 'lucide-react'
+import { Database, Settings, X } from 'lucide-react'
 
 function App() {
-  const { connected, currentUri, protectConnectionStringSecrets, setConnected, setDatabases, setSelectedDb, setCollections, setDocuments } = useStore()
+  const { connections, removeConnection, setDocuments } = useStore()
   const [settingsOpen, setSettingsOpen] = useState(false)
 
-  const handleDisconnect = async () => {
-    try {
-      await dbApi.disconnect()
-    } catch {
-      // ignore
-    }
-    setConnected(false, '')
-    setDatabases([])
-    setSelectedDb(null)
-    setCollections([])
+  const handleDisconnect = useCallback(async (id: string) => {
+    try { await dbApi.disconnectNamed(id) } catch { /* ignore */ }
+    removeConnection(id)
     setDocuments([])
-  }
+  }, [removeConnection, setDocuments])
 
-  if (!connected) {
+  if (connections.length === 0) {
     return <Connections />
   }
 
@@ -46,22 +39,20 @@ function App() {
           </button>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Circle className="w-2 h-2 fill-green-500 text-green-500" />
-            <span className="text-xs text-gray-400 font-mono max-w-xs truncate">
-              {protectConnectionStringSecrets
-                ? currentUri.replace(/:\/\/([^:@]+):([^@]+)@/, '://$1:••••••••@')
-                : currentUri}
-            </span>
-          </div>
-          <button
-            onClick={handleDisconnect}
-            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-red-400 bg-gray-700 hover:bg-gray-700 px-3 py-1.5 rounded-lg transition-colors border border-gray-600 hover:border-red-500/50"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            Disconnect
-          </button>
+        <div className="flex items-center gap-2">
+          {connections.map((c) => (
+            <div key={c.id} className="flex items-center gap-1.5 text-xs text-gray-400 font-mono bg-gray-700/50 px-2.5 py-1 rounded border border-gray-600">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+              {c.name}
+              <button
+                onClick={() => handleDisconnect(c.id)}
+                title="Disconnect"
+                className="text-gray-600 hover:text-red-400 transition-colors ml-0.5"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          ))}
         </div>
       </header>
 

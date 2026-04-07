@@ -13,6 +13,7 @@ pub(crate) fn parse_doc(json: &str) -> Result<Document, String> {
 
 #[tauri::command]
 pub async fn find_documents(
+    conn_id: String,
     db: String,
     coll: String,
     filter: Option<String>,
@@ -27,7 +28,7 @@ pub async fn find_documents(
 ) -> Result<Vec<String>, String> {
     let client = {
         let guard = state.0.lock().unwrap();
-        guard.as_ref().ok_or("Not connected")?.clone()
+        guard.get(&conn_id).ok_or_else(|| "Not connected".to_string())?.clone()
     };
     let collection = client.database(&db).collection::<Document>(&coll);
 
@@ -98,6 +99,7 @@ pub async fn find_documents(
 
 #[tauri::command]
 pub async fn insert_document(
+    conn_id: String,
     db: String,
     coll: String,
     doc: String,
@@ -105,7 +107,7 @@ pub async fn insert_document(
 ) -> Result<String, String> {
     let client = {
         let guard = state.0.lock().unwrap();
-        guard.as_ref().ok_or("Not connected")?.clone()
+        guard.get(&conn_id).ok_or_else(|| "Not connected".to_string())?.clone()
     };
     let collection = client.database(&db).collection::<Document>(&coll);
     let v: Value = serde_json::from_str(&doc).map_err(|e| e.to_string())?;
@@ -116,6 +118,7 @@ pub async fn insert_document(
 
 #[tauri::command]
 pub async fn update_document(
+    conn_id: String,
     db: String,
     coll: String,
     id: String,
@@ -124,7 +127,7 @@ pub async fn update_document(
 ) -> Result<(), String> {
     let client = {
         let guard = state.0.lock().unwrap();
-        guard.as_ref().ok_or("Not connected")?.clone()
+        guard.get(&conn_id).ok_or_else(|| "Not connected".to_string())?.clone()
     };
     let collection = client.database(&db).collection::<Document>(&coll);
     let oid = ObjectId::parse_str(&id).map_err(|e| e.to_string())?;
@@ -140,6 +143,7 @@ pub async fn update_document(
 
 #[tauri::command]
 pub async fn delete_document(
+    conn_id: String,
     db: String,
     coll: String,
     id: String,
@@ -147,12 +151,46 @@ pub async fn delete_document(
 ) -> Result<(), String> {
     let client = {
         let guard = state.0.lock().unwrap();
-        guard.as_ref().ok_or("Not connected")?.clone()
+        guard.get(&conn_id).ok_or_else(|| "Not connected".to_string())?.clone()
     };
     let collection = client.database(&db).collection::<Document>(&coll);
     let oid = ObjectId::parse_str(&id).map_err(|e| e.to_string())?;
     collection.delete_one(doc! { "_id": oid }, None).await.map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[tauri::command]
+pub async fn aggregate(
+    conn_id: String,
+    db: String,
+    coll: String,
+    pipeline: String,
+    state: State<'_, DbState>,
+) -> Result<Vec<String>, String> {
+    let client = {
+        let guard = state.0.lock().unwrap();
+        guard.get(&conn_id).ok_or_else(|| "Not connected".to_string())?.clone()
+    };
+    let collection = client.database(&db).collection::<Document>(&coll);
+
+    let v: serde_json::Value = serde_json::from_str(&pipeline).map_err(|e| e.to_string())?;
+    let stages = v.as_array().ok_or("Pipeline must be an array")?;
+    let pipeline_docs: Vec<Document> = stages
+        .iter()
+        .map(|s| bson::to_document(s).map_err(|e| e.to_string()))
+        .collect::<Result<_, _>>()?;
+
+    let mut cursor = collection
+        .aggregate(pipeline_docs, None)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let mut results = Vec::new();
+    while let Some(doc) = cursor.try_next().await.map_err(|e| e.to_string())? {
+        let json = serde_json::to_string(&doc).map_err(|e| e.to_string())?;
+        results.push(json);
+    }
+    Ok(results)
 }
 
 #[cfg(test)]
@@ -163,7 +201,6 @@ mod tests {
     fn parse_doc_simple_object() {
         let doc = parse_doc(r#"{"name": "Alice", "age": 30}"#).unwrap();
         assert_eq!(doc.get_str("name").unwrap(), "Alice");
-        // serde_json deserialises integers as i64; bson stores them as Int64
         assert_eq!(doc.get_i64("age").unwrap(), 30);
     }
 
@@ -209,7 +246,6 @@ mod tests {
 
     #[test]
     fn parse_doc_returns_error_for_non_object_json() {
-        // bson::to_document requires a JSON object, not an array
         let result = parse_doc(r#"["a", "b"]"#);
         assert!(result.is_err());
     }
@@ -223,7 +259,6 @@ mod tests {
 
     #[test]
     fn parse_doc_oid_extended_json() {
-        // MongoDB extended JSON $oid is handled by bson
         let doc = parse_doc(r#"{"_id": {"$oid": "507f1f77bcf86cd799439011"}}"#).unwrap();
         assert!(doc.get("_id").is_some());
     }

@@ -3,6 +3,7 @@ import { Search, ChevronDown, ChevronUp, RotateCcw } from 'lucide-react'
 import type { FindQuery } from '../lib/tauri'
 import { parseQueryField } from '../lib/mongoQuery'
 import { useStore } from '../store'
+import { FilterInput } from './FilterInput'
 
 const DEFAULT_SORT_MAP: Record<string, string> = {
   default:      '',
@@ -18,6 +19,7 @@ export interface QueryToolbarHandle {
 interface Props {
   onFind: (query: FindQuery) => void
   loading: boolean
+  fieldNames?: string[]
 }
 
 const PLACEHOLDER: Record<string, string> = {
@@ -86,7 +88,7 @@ function NumberInput({
   )
 }
 
-export const QueryToolbar = forwardRef<QueryToolbarHandle, Props>(function QueryToolbar({ onFind, loading }, ref) {
+export const QueryToolbar = forwardRef<QueryToolbarHandle, Props>(function QueryToolbar({ onFind, loading, fieldNames = [] }, ref) {
   const { defaultSort, maxTimeMsLimit } = useStore()
   useImperativeHandle(ref, () => ({ setFilter: (value) => setFilter(value) }))
   const [filter, setFilter] = useState('')
@@ -142,12 +144,12 @@ export const QueryToolbar = forwardRef<QueryToolbarHandle, Props>(function Query
       {/* Row 1: Filter + controls */}
       <div className="flex items-end gap-2">
         <div className="flex-1">
-          <QueryInput
-            label="Filter"
+          <FilterInput
             value={filter}
             onChange={setFilter}
             placeholder={PLACEHOLDER.filter}
             onEnter={handleFind}
+            fieldNames={fieldNames}
           />
         </div>
 

@@ -85,8 +85,13 @@ function NewEnvironmentModal({ onClose, onSave }: { onClose: () => void; onSave:
 
 // ── Main component ─────────────────────────────────────────────────────────
 
-export function Connections() {
-  const { setConnected, setDatabases } = useStore()
+interface ConnectionsProps {
+  asModal?: boolean
+  onClose?: () => void
+}
+
+export function Connections({ asModal, onClose }: ConnectionsProps = {}) {
+  const { addConnection } = useStore()
 
   // Environments
   const [envList, setEnvList] = useState<string[]>([])
@@ -177,10 +182,19 @@ export function Connections() {
     setConnectingName(name ?? null)
     setError(null)
     try {
-      await dbApi.connect(targetUri)
-      const dbs = await dbApi.listDatabases()
-      setDatabases(dbs)
-      setConnected(true, targetUri)
+      const connId = crypto.randomUUID()
+      await dbApi.connectNamed(connId, targetUri)
+      const dbs = await dbApi.listDatabasesFor(connId)
+      const { extractConnName } = await import('../store')
+      addConnection({
+        id: connId,
+        uri: targetUri,
+        name: extractConnName(targetUri),
+        databases: dbs,
+        selectedDb: null,
+        collections: [],
+      })
+      onClose?.()
     } catch (e: any) {
       setError(String(e))
     } finally {
@@ -223,8 +237,8 @@ export function Connections() {
 
   const isEditing = mode === 'edit'
 
-  return (
-    <div className="flex h-screen bg-gray-900 text-white overflow-hidden">
+  const inner = (
+    <div className={`flex bg-gray-900 text-white overflow-hidden ${asModal ? 'h-[90vh] rounded-xl' : 'h-screen'}`}>
       {/* Sidebar */}
       <aside className="w-72 shrink-0 bg-gray-800 border-r border-gray-700 flex flex-col">
         {/* Logo */}
@@ -480,4 +494,19 @@ export function Connections() {
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
     </div>
   )
+
+  if (asModal) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose?.() }}>
+        <div className="w-full max-w-5xl relative">
+          <button onClick={onClose} className="absolute -top-8 right-0 text-gray-400 hover:text-white transition-colors text-xs flex items-center gap-1">
+            <X className="w-4 h-4" /> Close
+          </button>
+          {inner}
+        </div>
+      </div>
+    )
+  }
+
+  return inner
 }

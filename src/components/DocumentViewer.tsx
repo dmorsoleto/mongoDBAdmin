@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import { useStore } from '../store'
 import { crud as crudApi } from '../lib/tauri'
 import type { FindQuery } from '../lib/tauri'
@@ -6,6 +6,7 @@ import { DocumentEditor } from './DocumentEditor'
 import { QueryToolbar } from './QueryToolbar'
 import type { QueryToolbarHandle } from './QueryToolbar'
 import { JsonView } from './JsonView'
+import { QueryEditorModal } from './QueryEditorModal'
 import {
   Plus,
   Pencil,
@@ -16,6 +17,7 @@ import {
   FileText,
   RefreshCw,
   AlertCircle,
+  Terminal,
 } from 'lucide-react'
 
 export function getDocId(doc: any): string {
@@ -28,6 +30,7 @@ export function getDocId(doc: any): string {
 
 export function DocumentViewer() {
   const {
+    activeConnId,
     selectedDb,
     selectedCollection,
     documents,
@@ -42,27 +45,46 @@ export function DocumentViewer() {
     setError,
   } = useStore()
 
+  const [queryEditorOpen, setQueryEditorOpen] = useState(false)
   const [editorOpen, setEditorOpen] = useState(false)
   const [editingDoc, setEditingDoc] = useState<any>(null)
   const [editorMode, setEditorMode] = useState<'insert' | 'edit'>('insert')
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [expandedDocs, setExpandedDocs] = useState<Set<string>>(new Set())
+  const [queryTime, setQueryTime] = useState<number | null>(null)
   const activeQuery = useRef<FindQuery>({})
   const toolbarRef = useRef<QueryToolbarHandle>(null)
+
+  const fieldNames = useMemo(() => {
+    const names = new Set<string>()
+    documents.forEach(doc => Object.keys(doc).forEach(k => names.add(k)))
+    return Array.from(names).sort()
+  }, [documents])
+
+  // Auto-fetch when the active collection changes (e.g. clicked in Sidebar)
+  useEffect(() => {
+    if (!activeConnId || !selectedDb || !selectedCollection) return
+    activeQuery.current = {}
+    toolbarRef.current?.setFilter('')
+    fetchDocuments(0, {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConnId, selectedDb, selectedCollection])
 
   const handleFilterByKey = (filter: string) => {
     toolbarRef.current?.setFilter(filter)
   }
 
   const fetchDocuments = useCallback(async (targetPage: number, query?: FindQuery) => {
-    if (!selectedDb || !selectedCollection) return
+    if (!activeConnId || !selectedDb || !selectedCollection) return
     const q = query ?? activeQuery.current
     const effectiveLimit = q.limit ?? pageSize
     const effectiveSkip = (q.skip ?? 0) + targetPage * effectiveLimit
     setLoading(true)
     setError(null)
+    const t0 = performance.now()
     try {
       const docs = await crudApi.findDocuments(
+        activeConnId,
         selectedDb,
         selectedCollection,
         q,
@@ -70,6 +92,7 @@ export function DocumentViewer() {
         effectiveSkip
       )
       const parsed = docs.map((d) => JSON.parse(d))
+      setQueryTime(performance.now() - t0)
       setDocuments(parsed)
       setPage(targetPage)
       setExpandedDocs(new Set())
@@ -78,7 +101,7 @@ export function DocumentViewer() {
     } finally {
       setLoading(false)
     }
-  }, [selectedDb, selectedCollection, pageSize, setDocuments, setPage, setLoading, setError])
+  }, [activeConnId, selectedDb, selectedCollection, pageSize, setDocuments, setPage, setLoading, setError])
 
   const handleFind = (query: FindQuery) => {
     activeQuery.current = query
@@ -117,7 +140,7 @@ export function DocumentViewer() {
     if (!id || !selectedDb || !selectedCollection) return
     setLoading(true)
     try {
-      await crudApi.deleteDocument(selectedDb, selectedCollection, id)
+      await crudApi.deleteDocument(activeConnId!, selectedDb, selectedCollection, id)
       setDeleteConfirmId(null)
       fetchDocuments(page)
     } catch (e: any) {
@@ -169,6 +192,11 @@ export function DocumentViewer() {
               {page * pageSize + 1}–{page * pageSize + documents.length} documents
             </span>
           )}
+          {queryTime !== null && !loading && (
+            <span className="text-gray-600 text-xs ml-1">
+              ({queryTime < 1000 ? `${Math.round(queryTime)}ms` : `${(queryTime / 1000).toFixed(2)}s`})
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -179,6 +207,13 @@ export function DocumentViewer() {
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             Refresh
+          </button>
+          <button
+            onClick={() => setQueryEditorOpen(true)}
+            className="flex items-center gap-1.5 text-sm text-gray-300 hover:text-white bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded-lg transition-colors border border-gray-600"
+          >
+            <Terminal className="w-3.5 h-3.5 text-green-400" />
+            New Query
           </button>
           {!readOnlyMode && (
             <button
@@ -198,7 +233,7 @@ export function DocumentViewer() {
       </div>
 
       {/* Query Toolbar */}
-      <QueryToolbar ref={toolbarRef} onFind={handleFind} loading={loading} />
+      <QueryToolbar ref={toolbarRef} onFind={handleFind} loading={loading} fieldNames={fieldNames} />
 
       {/* Error Banner */}
       {error && (
@@ -344,6 +379,10 @@ export function DocumentViewer() {
           onClose={() => setEditorOpen(false)}
           onSuccess={handleEditorSuccess}
         />
+      )}
+
+      {queryEditorOpen && (
+        <QueryEditorModal onClose={() => setQueryEditorOpen(false)} />
       )}
     </div>
   )

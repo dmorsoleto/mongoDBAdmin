@@ -7,36 +7,65 @@ function loadBool(key: string, fallback = false): boolean {
   return v === null ? fallback : v === 'true'
 }
 
+// ── Connection entry ─────────────────────────────────────────────────────────
+
+export interface ConnectionEntry {
+  id: string
+  uri: string
+  name: string          // e.g. "localhost:27017"
+  databases: string[]
+  selectedDb: string | null
+  collections: string[]
+}
+
+export function extractConnName(uri: string): string {
+  try {
+    const m = uri.match(/(?:mongodb(?:\+srv)?:\/\/)?(?:[^@]+@)?([^/?]+)/)
+    return m ? m[1] : uri.slice(0, 40)
+  } catch {
+    return uri.slice(0, 40)
+  }
+}
+
 // ── State ────────────────────────────────────────────────────────────────────
 
 interface AppState {
-  connected: boolean
-  currentUri: string
+  // Multi-connection
+  connections: ConnectionEntry[]
+  activeConnId: string | null
+
+  // Active view (mirrors active connection's selectedDb)
   selectedDb: string | null
   selectedCollection: string | null
-  databases: string[]
-  collections: string[]
+
+  // Documents
   documents: any[]
   totalDocs: number
   page: number
   pageSize: number
   loading: boolean
   error: string | null
-  // settings
+
+  // Settings
   readOnlyMode: boolean
   protectConnectionStringSecrets: boolean
   defaultSort: 'default' | '_id_asc' | '_id_desc' | 'natural_desc'
   maxTimeMsLimit: number | null
   theme: 'dark' | 'light'
-  setConnected: (v: boolean, uri?: string) => void
-  setSelectedDb: (db: string | null) => void
-  setSelectedCollection: (coll: string | null) => void
-  setDatabases: (dbs: string[]) => void
-  setCollections: (colls: string[]) => void
+
+  // Connection management
+  addConnection: (entry: ConnectionEntry) => void
+  removeConnection: (id: string) => void
+  updateConn: (id: string, patch: Partial<Pick<ConnectionEntry, 'databases' | 'selectedDb' | 'collections'>>) => void
+  activateCollection: (connId: string, db: string, coll: string) => void
+
+  // Document state
   setDocuments: (docs: any[]) => void
   setPage: (page: number) => void
   setLoading: (v: boolean) => void
   setError: (e: string | null) => void
+
+  // Settings setters
   setReadOnlyMode: (v: boolean) => void
   setProtectConnectionStringSecrets: (v: boolean) => void
   setDefaultSort: (v: 'default' | '_id_asc' | '_id_desc' | 'natural_desc') => void
@@ -45,12 +74,10 @@ interface AppState {
 }
 
 export const useStore = create<AppState>((set) => ({
-  connected: false,
-  currentUri: '',
+  connections: [],
+  activeConnId: null,
   selectedDb: null,
   selectedCollection: null,
-  databases: [],
-  collections: [],
   documents: [],
   totalDocs: 0,
   page: 0,
@@ -62,15 +89,46 @@ export const useStore = create<AppState>((set) => ({
   defaultSort: (localStorage.getItem('setting_defaultSort') as 'default' | '_id_asc' | '_id_desc' | 'natural_desc') ?? 'default',
   maxTimeMsLimit: localStorage.getItem('setting_maxTimeMsLimit') !== null ? Number(localStorage.getItem('setting_maxTimeMsLimit')) : null,
   theme: (localStorage.getItem('setting_theme') as 'dark' | 'light') ?? 'dark',
-  setConnected: (v, uri = '') => set({ connected: v, currentUri: uri }),
-  setSelectedDb: (db) => set({ selectedDb: db, selectedCollection: null, collections: [], documents: [] }),
-  setSelectedCollection: (coll) => set({ selectedCollection: coll, documents: [], page: 0 }),
-  setDatabases: (dbs) => set({ databases: dbs }),
-  setCollections: (colls) => set({ collections: colls }),
+
+  addConnection: (entry) =>
+    set((s) => ({ connections: [...s.connections, entry] })),
+
+  removeConnection: (id) =>
+    set((s) => {
+      const connections = s.connections.filter((c) => c.id !== id)
+      const wasActive = s.activeConnId === id
+      return {
+        connections,
+        activeConnId: wasActive ? (connections[0]?.id ?? null) : s.activeConnId,
+        selectedDb: wasActive ? null : s.selectedDb,
+        selectedCollection: wasActive ? null : s.selectedCollection,
+        documents: wasActive ? [] : s.documents,
+        page: wasActive ? 0 : s.page,
+      }
+    }),
+
+  updateConn: (id, patch) =>
+    set((s) => ({
+      connections: s.connections.map((c) => (c.id === id ? { ...c, ...patch } : c)),
+    })),
+
+  activateCollection: (connId, db, coll) =>
+    set((s) => ({
+      activeConnId: connId,
+      selectedDb: db,
+      selectedCollection: coll,
+      documents: [],
+      page: 0,
+      connections: s.connections.map((c) =>
+        c.id === connId ? { ...c, selectedDb: db } : c
+      ),
+    })),
+
   setDocuments: (docs) => set({ documents: docs }),
   setPage: (page) => set({ page }),
   setLoading: (v) => set({ loading: v }),
   setError: (e) => set({ error: e }),
+
   setReadOnlyMode: (v) => {
     localStorage.setItem('setting_readOnlyMode', String(v))
     set({ readOnlyMode: v })

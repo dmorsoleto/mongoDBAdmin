@@ -7,12 +7,10 @@ beforeEach(() => {
   localStorage.clear();
   document.documentElement.classList.remove("dark");
   useStore.setState({
-    connected: false,
-    currentUri: "",
+    connections: [],
+    activeConnId: null,
     selectedDb: null,
     selectedCollection: null,
-    databases: [],
-    collections: [],
     documents: [],
     totalDocs: 0,
     page: 0,

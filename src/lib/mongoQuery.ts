@@ -52,6 +52,24 @@ export function mongoShellToJson(input: string): string {
 }
 
 /**
+ * Parse and validate an aggregate pipeline string (array of stage objects).
+ * Returns the JSON string to send to Rust, or throws with a user-friendly message.
+ */
+export function parsePipeline(value: string): string {
+  const trimmed = value.trim()
+  if (!trimmed) throw new Error('Pipeline is empty')
+  const converted = mongoShellToJson(trimmed)
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(converted)
+  } catch {
+    throw new Error(`Invalid pipeline syntax — make sure it is a valid JSON array`)
+  }
+  if (!Array.isArray(parsed)) throw new Error('Pipeline must be an array: [ { $stage: … }, … ]')
+  return converted
+}
+
+/**
  * Parse and validate a MongoDB shell query string.
  * Returns the JSON string to send to Rust, or throws with a user-friendly message.
  */

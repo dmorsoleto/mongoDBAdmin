@@ -1,10 +1,10 @@
 import { invoke } from '@tauri-apps/api/core'
 
 export const db = {
-  connect: (uri: string) => invoke<string>('connect', { uri }),
-  disconnect: () => invoke<void>('disconnect'),
-  listDatabases: () => invoke<string[]>('list_databases'),
-  listCollections: (dbName: string) => invoke<string[]>('list_collections', { dbName }),
+  connectNamed:      (connId: string, uri: string) => invoke<string>('connect_named', { connId, uri }),
+  disconnectNamed:   (connId: string) => invoke<void>('disconnect_named', { connId }),
+  listDatabasesFor:  (connId: string) => invoke<string[]>('list_databases_for', { connId }),
+  listCollectionsFor:(connId: string, dbName: string) => invoke<string[]>('list_collections_for', { connId, dbName }),
 }
 
 export interface FindQuery {
@@ -19,8 +19,11 @@ export interface FindQuery {
 }
 
 export const crud = {
-  findDocuments: (db: string, coll: string, query: FindQuery, limit: number, skip: number) =>
+  aggregate: (connId: string, db: string, coll: string, pipeline: string) =>
+    invoke<string[]>('aggregate', { connId, db, coll, pipeline }),
+  findDocuments: (connId: string, db: string, coll: string, query: FindQuery, limit: number, skip: number) =>
     invoke<string[]>('find_documents', {
+      connId,
       db,
       coll,
       filter: query.filter ?? null,
@@ -32,12 +35,12 @@ export const crud = {
       skip,
       maxTimeMs: query.maxTimeMs ?? null,
     }),
-  insertDocument: (db: string, coll: string, doc: string) =>
-    invoke<string>('insert_document', { db, coll, doc }),
-  updateDocument: (db: string, coll: string, id: string, doc: string) =>
-    invoke<void>('update_document', { db, coll, id, doc }),
-  deleteDocument: (db: string, coll: string, id: string) =>
-    invoke<void>('delete_document', { db, coll, id }),
+  insertDocument: (connId: string, db: string, coll: string, doc: string) =>
+    invoke<string>('insert_document', { connId, db, coll, doc }),
+  updateDocument: (connId: string, db: string, coll: string, id: string, doc: string) =>
+    invoke<void>('update_document', { connId, db, coll, id, doc }),
+  deleteDocument: (connId: string, db: string, coll: string, id: string) =>
+    invoke<void>('delete_document', { connId, db, coll, id }),
 }
 
 export const connections = {

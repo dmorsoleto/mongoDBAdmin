@@ -11,7 +11,7 @@ interface DocumentEditorProps {
 }
 
 export function DocumentEditor({ document, mode, onClose, onSuccess }: DocumentEditorProps) {
-  const { selectedDb, selectedCollection } = useStore()
+  const { activeConnId, selectedDb, selectedCollection } = useStore()
   const [jsonText, setJsonText] = useState('')
   const [jsonError, setJsonError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -53,7 +53,7 @@ export function DocumentEditor({ document, mode, onClose, onSuccess }: DocumentE
   }
 
   const handleSave = async () => {
-    if (!selectedDb || !selectedCollection) return
+    if (!activeConnId || !selectedDb || !selectedCollection) return
 
     const parsed = validateJson(jsonText)
     if (!parsed) return
@@ -63,7 +63,7 @@ export function DocumentEditor({ document, mode, onClose, onSuccess }: DocumentE
 
     try {
       if (mode === 'insert') {
-        await crudApi.insertDocument(selectedDb, selectedCollection, jsonText)
+        await crudApi.insertDocument(activeConnId, selectedDb, selectedCollection, jsonText)
       } else if (mode === 'edit' && document) {
         const id = document._id?.$oid ?? document._id
         if (!id) {
@@ -71,7 +71,7 @@ export function DocumentEditor({ document, mode, onClose, onSuccess }: DocumentE
           setSaving(false)
           return
         }
-        await crudApi.updateDocument(selectedDb, selectedCollection, String(id), jsonText)
+        await crudApi.updateDocument(activeConnId, selectedDb, selectedCollection, String(id), jsonText)
       }
       onSuccess()
     } catch (e: any) {

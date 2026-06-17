@@ -2,7 +2,7 @@
 
 > Cliente desktop nativo para MongoDB, construído com Rust + Tauri. Leve, rápido e pronto para ambientes cloud.
 
-![Version](https://img.shields.io/badge/version-0.1.0-blue)
+![Version](https://img.shields.io/badge/version-0.2.2-blue)
 ![License](https://img.shields.io/badge/license-BSL%201.1-orange)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
 
@@ -25,6 +25,7 @@ Projetado para desenvolvedores que trabalham com MongoDB em qualquer ambiente �
 | **Smart Filtering** | Clique em qualquer campo da listagem para filtrar instantaneamente por valor |
 | **Visualização JSON** | Visualização formatada e colapsável de documentos aninhados |
 | **Suporte a Cloud** | Conectividade nativa com AWS DocumentDB e Azure CosmosDB (API Mongo) |
+| **Atualização Automática** | Notificação e instalação de novas versões com um clique, direto no app |
 | **Universal** | Compatível com qualquer versão do MongoDB e drivers existentes |
 
 ---
@@ -75,7 +76,7 @@ Após o download, instale normalmente como qualquer aplicativo da sua plataforma
 
 ### Pré-requisitos
 
-- [Node.js](https://nodejs.org) >= 18
+- [Node.js](https://nodejs.org) >= 20
 - [Rust](https://rustup.rs) >= 1.70
 - [Tauri CLI](https://tauri.app/start/prerequisites/)
 
@@ -121,8 +122,10 @@ git push origin v1.0.0
 
 O CI irá:
 1. Compilar em paralelo nas 3 plataformas
-2. Renomear os binários com a convenção `mongodb-admin_{version}_{os}_{arch}`
-3. Publicar a Release no GitHub com todos os arquivos anexados
+2. Assinar os binários para o sistema de atualização automática
+3. Renomear os binários com a convenção `mongodb-admin_{version}_{os}_{arch}`
+4. Gerar e publicar o `update.json` para atualização automática dos usuários
+5. Publicar a Release no GitHub com todos os arquivos anexados
 
 | Plataforma | Arquivo gerado |
 |---|---|

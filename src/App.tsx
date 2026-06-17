@@ -1,15 +1,27 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useStore } from './store'
 import { Connections } from './components/Connections'
 import { Sidebar } from './components/Sidebar'
 import { DocumentViewer } from './components/DocumentViewer'
 import { SettingsModal } from './components/SettingsModal'
 import { db as dbApi } from './lib/tauri'
+import { checkForUpdate } from './lib/updater'
 import { Database, Settings, X } from 'lucide-react'
 
 function App() {
   const { connections, removeConnection, setDocuments } = useStore()
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [updateAvailable, setUpdateAvailable] = useState<string | null>(null)
+
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      try {
+        const info = await checkForUpdate()
+        if (info) setUpdateAvailable(info.version)
+      } catch { /* silencioso */ }
+    }, 3000)
+    return () => clearTimeout(timer)
+  }, [])
 
   const handleDisconnect = useCallback(async (id: string) => {
     try { await dbApi.disconnectNamed(id) } catch { /* ignore */ }
@@ -55,6 +67,21 @@ function App() {
           ))}
         </div>
       </header>
+
+      {/* Update banner — shown when a new version is detected on startup */}
+      {updateAvailable && (
+        <div className="shrink-0 flex items-center justify-between px-6 py-2 bg-green-700/20 border-b border-green-700/40">
+          <span className="text-xs text-green-400">
+            New version <span className="font-mono font-semibold">v{updateAvailable}</span> available
+          </span>
+          <button
+            onClick={() => { setSettingsOpen(true) }}
+            className="text-xs text-green-300 hover:text-white underline transition-colors"
+          >
+            View in Settings → Updates
+          </button>
+        </div>
+      )}
 
       {/* Main Content */}
       <div className="flex flex-1 overflow-hidden">

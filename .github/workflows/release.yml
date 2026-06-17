@@ -107,37 +107,130 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           releaseId: ${{ needs.create-release.outputs.release_id }}
           args: --target ${{ matrix.target }}
 
-      - name: Rename and upload artifact
+      - name: Rename and upload artifacts
         shell: bash
         run: |
-          VERSION=${{ steps.get_version.outputs.VERSION }}
-          TARGET=${{ matrix.target }}
-          EXT=${{ matrix.ext }}
-          SUFFIX=${{ matrix.artifact_suffix }}
+          VERSION="${{ steps.get_version.outputs.VERSION }}"
+          TARGET="${{ matrix.target }}"
+          EXT="${{ matrix.ext }}"
+          SUFFIX="${{ matrix.artifact_suffix }}"
 
-          # Localiza o arquivo gerado pelo Tauri
-          FILE=$(find src-tauri/target/$TARGET/release/bundle -name "*.$EXT" | head -1)
-
-          if [ -z "$FILE" ]; then
-            echo "❌ Arquivo .$EXT não encontrado"
+          # === Installer (DMG / MSI / AppImage) ===
+          INSTALLER=$(find "src-tauri/target/$TARGET/release/bundle" -name "*.$EXT" 2>/dev/null | head -1)
+          if [ -z "$INSTALLER" ]; then
+            echo "❌ Installer .$EXT not found"
             exit 1
           fi
+          DEST_INSTALLER="mongodb-admin_${VERSION}_${SUFFIX}.${EXT}"
+          cp "$INSTALLER" "$DEST_INSTALLER"
+          gh release upload "v${VERSION}" "$DEST_INSTALLER" --clobber
+          echo "✅ Installer: $DEST_INSTALLER"
 
-          DEST="mongodb-admin_${VERSION}_${SUFFIX}.${EXT}"
-          cp "$FILE" "$DEST"
-          echo "✅ Gerado: $DEST"
+          # === Updater bundle + signature ===
+          if [[ "$TARGET" == *"apple-darwin"* ]]; then
+            UPDATER=$(find "src-tauri/target/$TARGET/release/bundle/macos" -name "*.app.tar.gz" 2>/dev/null | head -1)
+            if [ -n "$UPDATER" ] && [ -f "$UPDATER" ]; then
+              DEST_TAR="mongodb-admin_${VERSION}_${SUFFIX}.app.tar.gz"
+              cp "$UPDATER" "$DEST_TAR"
+              cp "${UPDATER}.sig" "${DEST_TAR}.sig"
+              gh release upload "v${VERSION}" "$DEST_TAR" "${DEST_TAR}.sig" --clobber
+              echo "✅ Updater bundle: $DEST_TAR"
+            else
+              echo "⚠️  No .app.tar.gz found — TAURI_SIGNING_PRIVATE_KEY may not be set"
+            fi
 
-          # Upload para a Release
-          gh release upload "v${VERSION}" "$DEST" --clobber
+          elif [[ "$TARGET" == *"pc-windows"* ]]; then
+            MSI_SIG=$(find "src-tauri/target/$TARGET/release/bundle/msi" -name "*.msi.sig" 2>/dev/null | head -1)
+            if [ -n "$MSI_SIG" ] && [ -f "$MSI_SIG" ]; then
+              DEST_SIG="mongodb-admin_${VERSION}_${SUFFIX}.msi.sig"
+              cp "$MSI_SIG" "$DEST_SIG"
+              gh release upload "v${VERSION}" "$DEST_SIG" --clobber
+              echo "✅ MSI signature: $DEST_SIG"
+            else
+              echo "⚠️  No .msi.sig found — TAURI_SIGNING_PRIVATE_KEY may not be set"
+            fi
+
+          elif [[ "$TARGET" == *"linux"* ]]; then
+            UPDATER=$(find "src-tauri/target/$TARGET/release/bundle/appimage" -name "*.AppImage.tar.gz" 2>/dev/null | head -1)
+            if [ -n "$UPDATER" ] && [ -f "$UPDATER" ]; then
+              DEST_TAR="mongodb-admin_${VERSION}_${SUFFIX}.AppImage.tar.gz"
+              cp "$UPDATER" "$DEST_TAR"
+              cp "${UPDATER}.sig" "${DEST_TAR}.sig"
+              gh release upload "v${VERSION}" "$DEST_TAR" "${DEST_TAR}.sig" --clobber
+              echo "✅ Updater bundle: $DEST_TAR"
+            else
+              echo "⚠️  No .AppImage.tar.gz found — TAURI_SIGNING_PRIVATE_KEY may not be set"
+            fi
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-update-json:
+    needs: [create-release, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Download .sig files from release
+        run: |
+          gh release download "v${{ steps.get_version.outputs.VERSION }}" \
+            --repo "${{ github.repository }}" \
+            --pattern "*.sig" \
+            --dir sigs/
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate and upload update.json
+        run: |
+          VERSION="${{ steps.get_version.outputs.VERSION }}"
+          OWNER="${{ github.repository_owner }}"
+          REPO="${{ github.event.repository.name }}"
+          BASE="https://github.com/${OWNER}/${REPO}/releases/download/v${VERSION}"
+
+          read_sig() { cat "sigs/$1" 2>/dev/null || echo ""; }
+
+          jq -n \
+            --arg version "$VERSION" \
+            --arg notes "MongoDB Admin v${VERSION}" \
+            --arg pub_date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg sig_macos_aarch64 "$(read_sig "mongodb-admin_${VERSION}_macos_aarch64.app.tar.gz.sig")" \
+            --arg url_macos_aarch64 "${BASE}/mongodb-admin_${VERSION}_macos_aarch64.app.tar.gz" \
+            --arg sig_macos_x86 "$(read_sig "mongodb-admin_${VERSION}_macos_x86_64.app.tar.gz.sig")" \
+            --arg url_macos_x86 "${BASE}/mongodb-admin_${VERSION}_macos_x86_64.app.tar.gz" \
+            --arg sig_win "$(read_sig "mongodb-admin_${VERSION}_windows_x86_64.msi.sig")" \
+            --arg url_win "${BASE}/mongodb-admin_${VERSION}_windows_x86_64.msi" \
+            --arg sig_linux "$(read_sig "mongodb-admin_${VERSION}_linux_x86_64.AppImage.tar.gz.sig")" \
+            --arg url_linux "${BASE}/mongodb-admin_${VERSION}_linux_x86_64.AppImage.tar.gz" \
+            '{
+              version: $version,
+              notes: $notes,
+              pub_date: $pub_date,
+              platforms: {
+                "darwin-aarch64": { signature: $sig_macos_aarch64, url: $url_macos_aarch64 },
+                "darwin-x86_64":  { signature: $sig_macos_x86,    url: $url_macos_x86 },
+                "windows-x86_64": { signature: $sig_win,          url: $url_win },
+                "linux-x86_64":   { signature: $sig_linux,        url: $url_linux }
+              }
+            }' > update.json
+
+          echo "Generated update.json:"
+          cat update.json
+
+          gh release upload "v${VERSION}" update.json --clobber \
+            --repo "${OWNER}/${REPO}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   publish-release:
-    needs: [create-release, build]
+    needs: [create-release, publish-update-json]
     runs-on: ubuntu-latest
     steps:
       - name: Publish Release (remove draft)

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { useStore } from '../store'
+import { UpdaterTab } from './UpdaterTab'
 
 // ── Shared ───────────────────────────────────────────────────────────────────
 
@@ -63,7 +64,7 @@ interface GeneralDraft {
 
 // ── Tabs ─────────────────────────────────────────────────────────────────────
 
-const TABS = ['General', 'Theme'] as const
+const TABS = ['General', 'Theme', 'Updates'] as const
 type Tab = (typeof TABS)[number]
 
 const DEFAULT_SORT_OPTIONS: {
@@ -313,25 +314,28 @@ export function SettingsModal({ onClose }: Props) {
         <div className="p-5">
           {activeTab === 'General' && <GeneralTab draft={draft} setDraft={setDraft} />}
           {activeTab === 'Theme' && <ThemeTab value={themeDraft} onChange={setThemeDraft} />}
+          {activeTab === 'Updates' && <UpdaterTab />}
         </div>
 
-        {/* Footer */}
-        <div className="flex justify-end gap-2 px-5 py-4 border-t border-gray-700 bg-gray-900/50">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-xs font-medium text-gray-400 hover:text-white bg-gray-700 hover:bg-gray-600 rounded-lg border border-gray-600 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            className="px-4 py-2 text-xs font-medium text-white bg-green-600 hover:bg-green-500 rounded-lg transition-colors"
-          >
-            Save
-          </button>
-        </div>
+        {/* Footer — hidden on Updates tab (no settings to save) */}
+        {activeTab !== 'Updates' && (
+          <div className="flex justify-end gap-2 px-5 py-4 border-t border-gray-700 bg-gray-900/50">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-xs font-medium text-gray-400 hover:text-white bg-gray-700 hover:bg-gray-600 rounded-lg border border-gray-600 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              className="px-4 py-2 text-xs font-medium text-white bg-green-600 hover:bg-green-500 rounded-lg transition-colors"
+            >
+              Save
+            </button>
+          </div>
+        )}
       </div>
     </div>,
     document.body,

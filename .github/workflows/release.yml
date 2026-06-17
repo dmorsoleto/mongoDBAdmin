@@ -63,6 +63,7 @@ jobs:
             ext: AppImage
 
     runs-on: ${{ matrix.platform }}
+    environment: PRD
 
     steps:
       - uses: actions/checkout@v4
@@ -138,11 +139,16 @@ jobs:
             if [ -n "$UPDATER" ] && [ -f "$UPDATER" ]; then
               DEST_TAR="mongodb-admin_${VERSION}_${SUFFIX}.app.tar.gz"
               cp "$UPDATER" "$DEST_TAR"
-              cp "${UPDATER}.sig" "${DEST_TAR}.sig"
-              gh release upload "v${VERSION}" "$DEST_TAR" "${DEST_TAR}.sig" --clobber
-              echo "✅ Updater bundle: $DEST_TAR"
+              if [ -f "${UPDATER}.sig" ]; then
+                cp "${UPDATER}.sig" "${DEST_TAR}.sig"
+                gh release upload "v${VERSION}" "$DEST_TAR" "${DEST_TAR}.sig" --clobber
+                echo "✅ Updater bundle + signature: $DEST_TAR"
+              else
+                gh release upload "v${VERSION}" "$DEST_TAR" --clobber
+                echo "⚠️  Updater bundle uploaded without signature (TAURI_SIGNING_PRIVATE_KEY not set in Secrets)"
+              fi
             else
-              echo "⚠️  No .app.tar.gz found — TAURI_SIGNING_PRIVATE_KEY may not be set"
+              echo "⚠️  No .app.tar.gz found"
             fi
 
           elif [[ "$TARGET" == *"pc-windows"* ]]; then
@@ -153,7 +159,7 @@ jobs:
               gh release upload "v${VERSION}" "$DEST_SIG" --clobber
               echo "✅ MSI signature: $DEST_SIG"
             else
-              echo "⚠️  No .msi.sig found — TAURI_SIGNING_PRIVATE_KEY may not be set"
+              echo "⚠️  No .msi.sig found (TAURI_SIGNING_PRIVATE_KEY not set in Secrets)"
             fi
 
           elif [[ "$TARGET" == *"linux"* ]]; then
@@ -161,11 +167,16 @@ jobs:
             if [ -n "$UPDATER" ] && [ -f "$UPDATER" ]; then
               DEST_TAR="mongodb-admin_${VERSION}_${SUFFIX}.AppImage.tar.gz"
               cp "$UPDATER" "$DEST_TAR"
-              cp "${UPDATER}.sig" "${DEST_TAR}.sig"
-              gh release upload "v${VERSION}" "$DEST_TAR" "${DEST_TAR}.sig" --clobber
-              echo "✅ Updater bundle: $DEST_TAR"
+              if [ -f "${UPDATER}.sig" ]; then
+                cp "${UPDATER}.sig" "${DEST_TAR}.sig"
+                gh release upload "v${VERSION}" "$DEST_TAR" "${DEST_TAR}.sig" --clobber
+                echo "✅ Updater bundle + signature: $DEST_TAR"
+              else
+                gh release upload "v${VERSION}" "$DEST_TAR" --clobber
+                echo "⚠️  Updater bundle uploaded without signature (TAURI_SIGNING_PRIVATE_KEY not set in Secrets)"
+              fi
             else
-              echo "⚠️  No .AppImage.tar.gz found — TAURI_SIGNING_PRIVATE_KEY may not be set"
+              echo "⚠️  No .AppImage.tar.gz found"
             fi
           fi
         env:

@@ -192,10 +192,11 @@ jobs:
 
       - name: Download .sig files from release
         run: |
+          mkdir -p sigs/
           gh release download "v${{ steps.get_version.outputs.VERSION }}" \
             --repo "${{ github.repository }}" \
             --pattern "*.sig" \
-            --dir sigs/
+            --dir sigs/ || echo "⚠️  No .sig files in release — updater will work after TAURI_SIGNING_PRIVATE_KEY is configured"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

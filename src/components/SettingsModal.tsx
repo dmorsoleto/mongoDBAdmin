@@ -283,7 +283,7 @@ export function SettingsModal({ onClose }: Props) {
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
 
       {/* Dialog */}
-      <div className="relative z-10 w-full max-w-lg bg-gray-800 border border-gray-700 rounded-xl shadow-2xl flex flex-col overflow-hidden">
+      <div className="relative z-10 w-full max-w-lg bg-gray-800 border border-gray-700 rounded-xl shadow-2xl flex flex-col overflow-hidden max-h-[calc(100vh-2rem)]">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700">
           <h2 className="text-sm font-semibold text-white">Settings</h2>
@@ -311,7 +311,7 @@ export function SettingsModal({ onClose }: Props) {
         </div>
 
         {/* Tab content */}
-        <div className="p-5">
+        <div className="p-5 overflow-y-auto flex-1">
           {activeTab === 'General' && <GeneralTab draft={draft} setDraft={setDraft} />}
           {activeTab === 'Theme' && <ThemeTab value={themeDraft} onChange={setThemeDraft} />}
           {activeTab === 'Updates' && <UpdaterTab />}
